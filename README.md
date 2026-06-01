@@ -1,34 +1,44 @@
 # lau-ricci-curvature-agents
 
-**Ollivier-Ricci and Forman-Ricci curvature on agent interaction graphs** — detect bottlenecks, predict consensus time, bound graph diameter via Bonnet-Myers, evolve topology via curvature flow, and design optimal fleet communication networks.
+**Ollivier-Ricci and Forman-Ricci curvature on agent interaction graphs.** Detect bottlenecks, prove consensus bounds, design optimal fleet topologies — all via discrete curvature.
+
+96 tests · MIT license · `nalgebra` + `serde`
+
+---
 
 ## What This Does
 
-Ricci curvature on graphs measures how "spread out" or "pinched" the local geometry is:
+This crate treats an agent fleet as a graph and computes **discrete curvature** on its edges. Curvature tells you:
 
-- **Positive curvature** → neighbors overlap heavily → information flows well → fast consensus
-- **Zero curvature** → random mixing (like a grid or tree)
-- **Negative curvature** → neighborhoods diverge → bottlenecks, over-squashing, slow convergence
+- **Positive curvature** → agents agree, information flows freely, fast consensus
+- **Zero curvature** → random mixing, neutral convergence
+- **Negative curvature** → bottlenecks, information doesn't cross, slow/divergent consensus
 
-This crate provides:
+The crate implements:
 
-- **Ollivier-Ricci curvature** — κ(x,y) = 1 − W₁(μ_x, μ_y)/d(x,y) via optimal transport
-- **Forman-Ricci curvature** — simpler combinatorial: F(u,v) = 4 − deg(u) − deg(v)
-- **Bottleneck detection** — find negative-curvature edges and suggest fixes
-- **Curvature flow** — evolve topology to increase curvature (triangle closing, rewiring)
-- **Bonnet-Myers theorem** — positive curvature → bounded diameter
-- **Concentration inequality** — curvature → mixing/consensus time bounds
-- **Belief space curvature** — Fisher information metric on agent belief distributions
-- **Fleet topology design** — engineer graphs with target minimum curvature
+1. **Ollivier-Ricci curvature** via optimal transport (Wasserstein-1 distance between neighborhood measures)
+2. **Forman-Ricci curvature** — a simpler combinatorial alternative
+3. **Belief space curvature** — Fisher-Rao metric on probability simplex, Riemann tensor, sectional/scalar curvature
+4. **Concentration of measure** — curvature → variance/mixing/consensus time bounds
+5. **Bonnet-Myers theorem** — positive curvature → bounded diameter → finite graph
+6. **Curvature flow** — evolve topology to increase curvature (triangle closing, rewiring)
+7. **Bottleneck detection** — find negative-curvature edges, suggest fixes
+8. **Fleet design** — engineer topologies that maximize curvature for fast consensus
+
+---
 
 ## Key Idea
 
-The Ollivier-Ricci curvature κ(x,y) = 1 − W₁(μ_x, μ_y)/d(x,y) measures how much the probability distributions around two adjacent nodes overlap. High overlap (high κ) means information spreads efficiently. The key applications:
+**Ollivier-Ricci curvature** of an edge (x,y):
 
-1. **Bottleneck detection**: Edges with κ < 0 are communication bottlenecks
-2. **Consensus time**: If κ_min > 0, consensus time is O(n/κ_min)
-3. **Diameter bound**: If κ_min > 0, diameter ≤ 1/κ_min (Bonnet-Myers)
-4. **Topology design**: Optimize the graph to maximize minimum curvature
+**κ(x,y) = 1 − W₁(μₓ, μᵧ) / d(x,y)**
+
+where μₓ is the probability measure around x (lazy random walk), μᵧ around y, and W₁ is the 1-Wasserstein (Earth Mover's) distance.
+
+- κ > 0: neighbors overlap significantly → information flows well
+- κ < 0: neighbors are far apart → bottleneck
+
+---
 
 ## Install
 
@@ -37,228 +47,269 @@ The Ollivier-Ricci curvature κ(x,y) = 1 − W₁(μ_x, μ_y)/d(x,y) measures ho
 lau-ricci-curvature-agents = "0.1.0"
 ```
 
+Dependencies: `nalgebra = "0.33"` (serde), `serde = "1"`, `serde_json = "1"`, `approx = "0.5"` (dev).
+
+---
+
 ## Quick Start
 
 ```rust
-use lau_ricci_curvature_agents::*;
+use lau_ricci_curvature_agents::{
+    AgentGraph, OllivierRicciCurvature, FormanRicciCurvature,
+    MeasureStrategy, TransportSolver, BottleneckDetector, FleetDesigner,
+};
 
-// Build an agent interaction graph
-let mut graph = AgentGraph::new(6);
-graph.add_edge(0, 1, 1.0);
-graph.add_edge(1, 2, 1.0);
-graph.add_edge(2, 3, 1.0);
-graph.add_edge(3, 4, 1.0);
-graph.add_edge(4, 5, 1.0);
+fn main() {
+    // Build a fleet graph
+    let mut graph = AgentGraph::new(8);
+    graph.add_edge(0, 1, 1.0);
+    graph.add_edge(1, 2, 1.0);
+    graph.add_edge(2, 3, 1.0);
+    graph.add_edge(3, 4, 1.0);
+    graph.add_edge(4, 5, 1.0);
+    graph.add_edge(5, 6, 1.0);
+    graph.add_edge(6, 7, 1.0);
+    // This is a path graph — has negative curvature in the middle
 
-// Compute Ollivier-Ricci curvature
-let orc = OllivierRicciCurvature::default();
-let curvatures = orc.all_curvatures(&graph);
-for ((a, b), k) in &curvatures {
-    println!("Edge ({}, {}): κ = {:.4}", a, b, k);
+    // Compute Ollivier-Ricci curvature
+    let orc = OllivierRicciCurvature::new(
+        MeasureStrategy::LazyRandomWalk { alpha: 0.5 },
+        TransportSolver::Exact,
+    );
+    let avg_k = orc.average_curvature(&graph);
+    let min_k = orc.min_curvature(&graph);
+    println!("Average curvature: {:.4}", avg_k);
+    println!("Min curvature:     {:.4}", min_k);
+
+    // Detect bottlenecks
+    let detector = BottleneckDetector::new(0.0);
+    let bottlenecks = detector.detect(&graph);
+    for b in &bottlenecks {
+        println!("Bottleneck: edge {:?}, severity {:.4}", b.edge, b.severity);
+    }
+
+    // Design a better fleet topology
+    let designer = FleetDesigner::default();
+    let result = designer.design(8, 4, 0.1);
+    println!("Designed fleet: {} edges, curvature {:.4}, diameter {}",
+        result.graph.num_edges(), result.min_curvature, result.diameter);
 }
-println!("Average curvature: {:.4}", orc.average_curvature(&graph));
-
-// Compute Forman-Ricci curvature (much faster)
-let forman = FormanRicciCurvature::default();
-println!("Forman curvature (0,1): {:.1}", forman.edge_curvature(&graph, 0, 1));
-
-// Detect bottlenecks
-let detector = BottleneckDetector::new(0.0);
-let bottlenecks = detector.detect(&graph);
-for bn in &bottlenecks {
-    println!("Bottleneck ({}, {}): severity = {:.2}", bn.edge.0, bn.edge.1, bn.severity);
-}
-
-// Bonnet-Myers analysis
-let bm = BonnetMyers::default();
-let result = bm.analyze(&graph);
-println!("Diameter bound: {:?}, actual: {}", result.diameter_bound, result.actual_diameter);
 ```
+
+---
 
 ## API Reference
 
-### `graph` — Agent Interaction Graph
+### Graph (`graph`)
 
 | Type | Description |
 |------|-------------|
-| `AgentGraph` | Weighted undirected graph. Agents are nodes 0..n, edges have weights. |
-| `AgentId` | Type alias: `usize` |
-| `EdgeId` | Type alias: `(usize, usize)` |
+| `AgentGraph` | Weighted undirected graph with BFS distance, Laplacian, connected components |
+| `AgentId` | `usize` — node identifier |
+| `EdgeId` | `(AgentId, AgentId)` — sorted pair |
 
-**`AgentGraph` methods:**
-- `new(n)`, `num_agents()`, `num_edges()`
-- `add_edge(a, b, w)`, `remove_edge(a, b)`
-- `has_edge(a, b) → bool`, `edge_weight(a, b) → Option<f64>`
-- `neighbors(a) → Vec<(AgentId, Weight)>`, `degree(a) → usize`
-- `edges() → Vec<(AgentId, AgentId)>`
-- `adjacency_matrix() → DMatrix<f64>`, `laplacian() → DMatrix<f64>`
-- `diameter() → usize`, `shortest_path(a, b) → Option<Vec<usize>>`
-- `complete(n)`, `ring(n)`, `path(n)`, `star(n)` — Constructors
+**`AgentGraph`** methods:
+- `new(n)`, `complete(n)`, `path(n)`, `cycle(n)`, `star(n)`, `grid(rows, cols)`
+- `add_edge(a, b, w)`, `edge_weight(a, b)`, `neighbors(a)`, `degree(a)`
+- `edges()`, `agents()`, `has_edge(a, b)`, `num_agents()`, `num_edges()`
+- `distance(a, b)` — BFS shortest path
+- `diameter()` — longest shortest path
+- `laplacian()` — `DMatrix<f64>` combinatorial Laplacian (D − A)
+- `connected_components()` — `Vec<Vec<AgentId>>`
 
----
-
-### `ollivier_ricci` — Ollivier-Ricci Curvature
+### Ollivier-Ricci Curvature (`ollivier_ricci`)
 
 | Type | Description |
 |------|-------------|
-| `MeasureStrategy` | How to build neighborhood measure: LazyRandomWalk{alpha}, UniformNeighbors, Custom{probs}. |
-| `TransportSolver` | Optimal transport solver: Exact, Sinkhorn{reg, iterations}. |
-| `OllivierRicciCurvature` | Main curvature computer. |
+| `OllivierRicciCurvature` | Main curvature computer: measure strategy + transport solver |
+| `MeasureStrategy` | `LazyRandomWalk{alpha}`, `UniformNeighbors`, `Custom{probs}` |
+| `TransportSolver` | `Exact` (greedy LP), `Sinkhorn{reg, iterations}` |
 
-**`OllivierRicciCurvature` methods:**
-- `new(measure, solver)`, `default()` — α=0.5 lazy random walk, exact solver
-- `measure_at(&graph, a) → Vec<(AgentId, f64)>` — Neighborhood probability distribution
-- `wasserstein_1(&support_a, &support_b, &graph) → f64` — W₁ distance between measures
-- `edge_curvature(&graph, a, b) → f64` — κ(a,b) = 1 − W₁/d
-- `all_curvatures(&graph) → Vec<((AgentId, AgentId), f64)>` — All edges
-- `average_curvature(&graph) → f64`, `min_curvature(&graph) → f64`
+**`OllivierRicciCurvature`** methods:
+- `new(measure, solver)` — construct with chosen strategy
+- `measure_at(graph, a)` → `Vec<(AgentId, f64)>` — neighborhood probability measure
+- `wasserstein_1(graph, mu_x, mu_y)` → `f64` — optimal transport distance
+- `edge_curvature(graph, a, b)` → `f64` — κ(a,b) = 1 − W₁/d
+- `all_curvatures(graph)` → `Vec<((AgentId, AgentId), f64)>`
+- `average_curvature(graph)` → `f64`
+- `min_curvature(graph)` → `f64`
+- `max_curvature(graph)` → `f64`
 
----
-
-### `forman_ricci` — Forman-Ricci Curvature
+### Forman-Ricci Curvature (`forman_ricci`)
 
 | Type | Description |
 |------|-------------|
-| `FormanRicciCurvature` | Combinatorial curvature: F(u,v) = 4 − deg(u) − deg(v). |
+| `FormanRicciCurvature` | Combinatorial curvature: F(u,v) = 4 − deg(u) − deg(v) (unweighted) |
 
 **Methods:**
-- `new(weighted)`, `default()` — Unweighted
-- `edge_curvature(&graph, a, b) → f64` — Single edge
-- `all_curvatures(&graph) → Vec<((AgentId, AgentId), f64)>`
-- `average_curvature(&graph) → f64`, `min_curvature(&graph) → f64`
+- `new(weighted)`, `edge_curvature(graph, a, b)`, `all_curvatures(graph)`, `average_curvature(graph)`, `min_curvature(graph)`, `max_curvature(graph)`
 
----
-
-### `bottleneck` — Bottleneck Detection
+### Belief Space Curvature (`belief_curvature`)
 
 | Type | Description |
 |------|-------------|
-| `Bottleneck` | A detected bottleneck: edge, curvatures (OR + Forman), severity, suggested fixes. |
-| `BottleneckDetector` | Detect edges with curvature below threshold. |
+| `BeliefState` | Probability distribution: `uniform(n)`, `from_probs(v)`, `dirac(n, k)` |
+| `BeliefSpaceCurvature` | Fisher-Rao metric, Riemann tensor, sectional/scalar curvature on simplex |
 
-**`BottleneckDetector`:**
-- `new(threshold)`, `default()` — threshold = 0.0
-- `detect(&graph) → Vec<Bottleneck>` — All bottleneck edges with suggested fixes
+**`BeliefSpaceCurvature`** methods:
+- `new(categories)` — construct for n-category belief space
+- `fisher_matrix(belief)` → `(n−1)×(n−1)` Fisher information matrix
+- `christoffel_symbols(belief)` → `Vec<Vec<Vec<f64>>>` — Γᵏᵢⱼ connection coefficients
+- `riemann_tensor(belief)` → 4D array Rˡᵢⱼₘ
+- `sectional_curvature(belief, i, j)` → `f64`
+- `scalar_curvature(belief)` → `f64`
+- `fisher_rao_distance(b1, b2)` → `f64` — √(2 Σ(√pᵢ − √qᵢ)²)
+- `fleet_belief_curvature(beliefs)` → `f64` — average scalar curvature across fleet
 
----
-
-### `curvature_flow` — Curvature-Driven Topology Evolution
-
-| Type | Description |
-|------|-------------|
-| `FlowStrategy` | Enum: TriangleClosing, Rewire, NeighborhoodFilling. |
-| `FlowStep` | Result: average curvature before/after, edges added/removed, improvement. |
-| `CurvatureFlow` | Evolve graph to increase curvature. |
-
-**`CurvatureFlow`:**
-- `new(orc, strategy, learning_rate)`, `default()` — Triangle closing, lr=0.1
-- `step(&mut graph) → FlowStep` — One evolution step
-- `run(&mut graph, steps) → Vec<FlowStep>` — Multiple steps
-
----
-
-### `bonnet_myers` — Bonnet-Myers Theorem
+### Concentration of Measure (`concentration`)
 
 | Type | Description |
 |------|-------------|
-| `BonnetMyersResult` | Analysis: min curvature, diameter bound, actual diameter, satisfaction flag. |
-| `BonnetMyers` | Checker: if κ ≥ κ₀ > 0, then diam(G) ≤ 1/κ₀. |
+| `CurvatureConcentration` | Converts curvature → variance/mixing/consensus bounds |
+| `ConcentrationResult` | `min_curvature`, `variance_bound`, `mixing_time_bound`, `consensus_time_bound` |
+
+**Theorem**: If κ ≥ κ₀ > 0, then:
+- Variance of any 1-Lipschitz f ≤ n/(4κ₀)
+- Mixing time ≤ O(log(n)/κ₀)
+- Consensus time ≤ O(n/κ₀)
+
+### Bonnet-Myers (`bonnet_myers`)
+
+| Type | Description |
+|------|-------------|
+| `BonnetMyers` | Checks Bonnet-Myers diameter bound |
+| `BonnetMyersResult` | `min_curvature`, `diameter_bound`, `actual_diameter`, `satisfies_bonnet_myers` |
+
+**Theorem**: If κ ≥ κ₀ > 0 everywhere, then diam(G) ≤ ⌊1/κ₀⌋.
+
+### Curvature Flow (`curvature_flow`)
+
+| Type | Description |
+|------|-------------|
+| `CurvatureFlow` | Evolve graph topology to increase curvature |
+| `FlowStrategy` | `TriangleClosing`, `Rewire`, `NeighborhoodFilling` |
+| `FlowStep` | `avg_before`, `avg_after`, `edges_added`, `edges_removed`, `improvement` |
 
 **Methods:**
-- `new(orc)`, `default()`
-- `diameter_bound(&graph) → Option<usize>` — Upper bound if κ_min > 0
-- `analyze(&graph) → BonnetMyersResult`
+- `step(graph)` → `(AgentGraph, FlowStep)` — one topology evolution step
+- `evolve(graph, steps)` → `(AgentGraph, Vec<FlowStep>)` — multi-step evolution
 
----
-
-### `concentration` — Curvature-Concentration Inequality
+### Bottleneck Detection (`bottleneck`)
 
 | Type | Description |
 |------|-------------|
-| `ConcentrationResult` | Bounds: variance, mixing time, consensus time. |
-| `CurvatureConcentration` | Analyzer: high curvature → fast concentration. |
+| `BottleneckDetector` | Finds edges with curvature below threshold |
+| `Bottleneck` | `edge`, `ollivier_curvature`, `forman_curvature`, `severity`, `suggested_fixes` |
 
 **Methods:**
-- `new(orc)`, `default()`
-- `analyze(&graph) → ConcentrationResult` — If κ_min > 0: variance ≤ n/(4κ), mixing ≤ O(log(n)/κ), consensus ≤ O(n/κ)
+- `new(threshold)`, `detect(graph)` → `Vec<Bottleneck>`, `fix_all(graph)` → `AgentGraph`
 
----
-
-### `belief_curvature` — Belief Space Curvature
+### Fleet Design (`fleet`)
 
 | Type | Description |
 |------|-------------|
-| `BeliefState` | A probability distribution over categories. Methods: `uniform(n)`, `from_probs(v)`, `dirac(n,k)`, `is_valid()`. |
-| `BeliefSpaceCurvature` | Fisher information metric curvature on belief space. |
+| `FleetDesigner` | Design topologies maximizing curvature |
+| `FleetDesignGoals` | `n_agents`, `target_min_curvature`, `max_degree`, `ensure_bonnet_myers` |
+| `FleetDesignResult` | `graph`, `avg_curvature`, `min_curvature`, `diameter`, `bottleneck_count`, `bonnet_myers_satisfied`, `estimated_consensus_time` |
 
-**`BeliefSpaceCurvature`:**
-- `new(categories)`, `fisher_information_matrix(&belief) → DMatrix<f64>`
-- `fisher_rao_distance(&b1, &b2) → f64` — Geodesic distance in belief space
-- `sectional_curvature(&b1, &b2, &b3) → f64` — Curvature of the 2D section
+**Methods:**
+- `design(n, max_degree, target_curvature)` → `FleetDesignResult`
+- `design_with_goals(goals)` → `FleetDesignResult`
 
 ---
-
-### `fleet` — Fleet Topology Design
-
-| Type | Description |
-|------|-------------|
-| `FleetDesignGoals` | Target: n_agents, target_min_curvature, max_degree, ensure_bonnet_myers. |
-| `FleetDesignResult` | Output: graph, curvatures, diameter, bottlenecks, consensus time. |
-| `FleetDesigner` | Design graphs that satisfy curvature targets. |
-
-**`FleetDesigner`:**
-- `default()`
-- `design(&goals) → FleetDesignResult` — Design from scratch
-- `optimize(&mut graph, steps) → FleetDesignResult` — Optimize existing graph
-- `compare_topologies(n, topologies) → Vec<FleetDesignResult>` — Compare designs
 
 ## How It Works
 
-1. **Neighborhood measures**: For each agent, build a probability distribution μ_x over its neighborhood (lazy random walk: weight α on self, (1−α)/deg on each neighbor).
+### Pipeline
 
-2. **Optimal transport**: Compute W₁(μ_x, μ_y) — the cost of transporting the measure at x to the measure at y. The exact solver uses the network simplex; the Sinkhorn solver uses entropic regularization.
+```
+AgentGraph
+    │
+    ├─→ OllivierRicciCurvature ──→ edge curvatures (via optimal transport)
+    ├─→ FormanRicciCurvature   ──→ edge curvatures (combinatorial)
+    │
+    ├─→ CurvatureConcentration ──→ variance/mixing/consensus bounds
+    ├─→ BonnetMyers            ──→ diameter bound
+    │
+    ├─→ BottleneckDetector     ──→ negative-curvature edges + fixes
+    ├─→ CurvatureFlow          ──→ topology evolution
+    └─→ FleetDesigner          ──→ optimal topology from scratch
+```
 
-3. **Curvature**: κ(x,y) = 1 − W₁(μ_x, μ_y)/d(x,y). If κ > 0, measures overlap more than expected (positive curvature, tree-like). If κ < 0, they diverge (negative curvature, expander-like).
+### Optimal Transport (Wasserstein-1)
 
-4. **Forman-Ricci**: A simpler formula F(u,v) = 4 − deg(u) − deg(v) that captures the combinatorial curvature without optimal transport. Fast to compute, useful as a first pass.
+The core computation: given two probability measures μₓ, μᵧ on graph nodes, find the minimum-cost transport plan.
 
-5. **Bottleneck detection**: Edges with κ < threshold are bottlenecks. Suggested fixes: add triangles (close 2-paths into 3-cycles) or rewire edges.
+**Exact solver**: Greedy matching — sort (source, target) pairs by graph distance, transport mass in cost order. Exact for discrete measures.
 
-6. **Curvature flow**: Iteratively modify the graph to increase average curvature. Triangle closing is the most effective: for every pair of agents that share a neighbor, add an edge between them.
+**Sinkhorn solver**: Iterative entropic regularization — Kᵢⱼ = exp(−d(xᵢ,yⱼ)/ε), alternating projections: u ← a./(Kv), v ← b./(Kᵀu). Approximate but smooth.
 
-7. **Concentration**: If κ_min > 0, the graph satisfies a concentration inequality — any 1-Lipschitz function has bounded variance, and random walks mix in O(log(n)/κ_min) steps.
+### Curvature Flow Strategies
+
+- **TriangleClosing**: For each negative-curvature edge (u,v), find shared neighbors w. If u and v share a neighbor but aren't directly connected to that neighbor's neighbors, add those edges.
+- **Rewire**: Remove the worst-curvature edge. Add an edge that most improves curvature.
+- **NeighborhoodFilling**: For each negative-curvature edge (u,v), connect the neighbors of u to the neighbors of v.
+
+### Belief Space Geometry
+
+Agents hold beliefs p ∈ Δⁿ⁻¹ (probability simplex). The Fisher information metric:
+
+gᵢⱼ(p) = δᵢⱼ/pᵢ + 1/pₙ
+
+This induces Riemannian curvature via Christoffel symbols → Riemann tensor → sectional curvature → scalar curvature.
+
+---
 
 ## The Math
 
 ### Ollivier-Ricci Curvature
 
-For adjacent nodes x, y on a metric graph with probability measures μ_x, μ_y:
-κ(x,y) = 1 − W₁(μ_x, μ_y)/d(x,y)
+For adjacent nodes x, y with neighborhood measures μₓ, μᵧ:
 
-where W₁ is the 1-Wasserstein (earth mover's) distance. This is the discrete analog of the Ricci curvature lower bound in Riemannian geometry.
+**κ(x,y) = 1 − W₁(μₓ, μᵧ) / d(x,y)**
+
+where W₁(μ,ν) = inf{Σ cᵢⱼ d(xᵢ,yⱼ) : T is a transport plan from μ to ν}
+
+Range: κ ∈ [−1, 1]
+- κ = 1: μₓ = μᵧ (perfect overlap, e.g. complete graph)
+- κ = 0: tree-like / flat
+- κ = −1: maximally divergent neighborhoods
 
 ### Forman-Ricci Curvature
 
-For an edge e = (u,v) in an unweighted graph:
-F(e) = 4 − deg(u) − deg(v)
+For edge e = (u,v) with weight wₑ:
 
-This counts "parallel edges" (common neighbors) minus "crossing edges" (other edges from u and v). High-degree nodes connected by an edge have negative Forman curvature.
+**F(e) = wₑ(wᵤ/wₑ + wᵥ/wₑ − deg(u) − deg(v))**
+
+Unweighted: F(u,v) = 4 − deg(u) − deg(v)
+
+Range: (−∞, 4]
+
+### Curvature-Concentration Inequality
+
+If κ(x,y) ≥ κ₀ > 0 for all edges:
+
+- **Variance bound**: Var(f) ≤ n/(4κ₀) for any 1-Lipschitz f
+- **Mixing time**: τ_mix ≤ O(log(n)/κ₀)
+- **Consensus time**: τ_consensus ≤ O(n/κ₀)
 
 ### Bonnet-Myers Theorem
 
-If a Riemannian manifold has Ric ≥ (n−1)κ > 0, then diam(M) ≤ π/√κ. The discrete analog: if all Ollivier-Ricci curvatures are ≥ κ₀ > 0, then diam(G) ≤ 1/κ₀.
+If κ ≥ κ₀ > 0 everywhere, then **diam(G) ≤ ⌊1/κ₀⌋**.
 
-### Concentration of Measure
+Classical analog: positive Ricci curvature on a Riemannian manifold bounds the diameter (Bonnet-Myers theorem in Riemannian geometry).
 
-On a graph with κ_min > 0, for any 1-Lipschitz function f:
-Var(f) ≤ n/(4·κ_min)
-This means agent states concentrate rapidly around the mean — fast consensus.
+### Fisher-Rao Metric
 
-### Fisher Information Metric
+On the probability simplex Δⁿ⁻¹, the Fisher information metric is:
 
-The Fisher-Rao metric on the simplex of probability distributions gives a Riemannian structure on belief space. Its geodesic distance between beliefs p, q is:
-d_FR(p, q) = 2·arccos(Σᵢ √(pᵢ qᵢ))
-The sectional curvature of this space governs how beliefs diverge/converge.
+gᵢⱼ(θ) = δᵢⱼ/θᵢ + 1/θₙ    (for i,j ∈ {1,...,n−1})
+
+Fisher-Rao distance: d(p,q) = 2√(Σ(√pᵢ − √qᵢ)²)
+
+This is the **Hellinger distance** scaled by 2, and equals the geodesic distance on the simplex under the Fisher metric.
+
+---
 
 ## License
 

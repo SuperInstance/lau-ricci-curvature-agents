@@ -1,3 +1,4 @@
+#![allow(clippy::needless_range_loop, clippy::type_complexity, clippy::derivable_impls, clippy::implicit_saturating_sub, clippy::unnecessary_map_or, non_snake_case)]
 //! # lau-ricci-curvature-agents
 //!
 //! Ollivier-Ricci and Forman-Ricci curvature on agent interaction graphs.

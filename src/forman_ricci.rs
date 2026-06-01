@@ -6,7 +6,7 @@
 //! Simplified unweighted:
 //! F(u,v) = 4 - deg(u) - deg(v)
 
-use crate::graph::{AgentGraph, AgentId, Weight};
+use crate::graph::{AgentGraph, AgentId};
 use serde::{Deserialize, Serialize};
 
 /// Forman-Ricci curvature computer.

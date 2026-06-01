@@ -1,7 +1,7 @@
 //! Agent interaction graph representation.
 
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 /// Unique identifier for an agent node.
 pub type AgentId = usize;
@@ -12,6 +12,22 @@ pub type EdgeId = (AgentId, AgentId);
 /// Weight for edges and measures.
 pub type Weight = f64;
 
+mod edge_weights_serde {
+    use super::{AgentId, Weight};
+    use serde::{Serializer, Deserializer, Serialize, Deserialize};
+    use std::collections::HashMap;
+
+    pub fn serialize<S: Serializer>(map: &HashMap<(AgentId, AgentId), Weight>, s: S) -> Result<S::Ok, S::Error> {
+        let vec: Vec<((AgentId, AgentId), Weight)> = map.iter().map(|(&k, &v)| (k, v)).collect();
+        vec.serialize(s)
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<HashMap<(AgentId, AgentId), Weight>, D::Error> {
+        let vec: Vec<((AgentId, AgentId), Weight)> = Vec::deserialize(d)?;
+        Ok(vec.into_iter().collect())
+    }
+}
+
 /// An agent interaction graph — agents are nodes, interactions are weighted edges.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentGraph {
@@ -20,6 +36,7 @@ pub struct AgentGraph {
     /// Adjacency: agent -> list of (neighbor, weight)
     adj: HashMap<AgentId, Vec<(AgentId, Weight)>>,
     /// Edge weights indexed by sorted pair
+    #[serde(with = "edge_weights_serde")]
     edge_weights: HashMap<EdgeId, Weight>,
 }
 
@@ -49,7 +66,7 @@ impl AgentGraph {
         if a == b {
             return;
         }
-        let (lo, hi) = if a < b { (a, b) } else (b, a);
+        let (lo, hi) = if a < b { (a, b) } else { (b, a) };
         self.edge_weights.insert((lo, hi), w);
         self.adj.entry(a).or_default().push((b, w));
         self.adj.entry(b).or_default().push((a, w));
@@ -57,7 +74,7 @@ impl AgentGraph {
 
     /// Get edge weight.
     pub fn edge_weight(&self, a: AgentId, b: AgentId) -> Option<Weight> {
-        let (lo, hi) = if a < b { (a, b) } else (b, a);
+        let (lo, hi) = if a < b { (a, b) } else { (b, a) };
         self.edge_weights.get(&(lo, hi)).copied()
     }
 
@@ -85,7 +102,7 @@ impl AgentGraph {
 
     /// Check if edge exists.
     pub fn has_edge(&self, a: AgentId, b: AgentId) -> bool {
-        let (lo, hi) = if a < b { (a, b) } else (b, a);
+        let (lo, hi) = if a < b { (a, b) } else { (b, a) };
         self.edge_weights.contains_key(&(lo, hi))
     }
 

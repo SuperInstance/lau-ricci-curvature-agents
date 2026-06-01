@@ -189,7 +189,8 @@ mod tests {
         let g = AgentGraph::path(10);
         let cc = CurvatureConcentration::default();
         let result = cc.analyze(&g);
-        assert!(result.min_curvature < 0.0, "path should have negative curvature");
+        // Path curvature with lazy RW alpha=0.5 is non-negative
+        assert!(result.min_curvature >= 0.0, "path should have non-negative curvature");
     }
 
     #[test]

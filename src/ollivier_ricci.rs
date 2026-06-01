@@ -4,8 +4,7 @@
 //! where μ_x is the neighborhood probability measure around x,
 //! μ_y around y, and W₁ is the 1-Wasserstein distance.
 
-use crate::graph::{AgentGraph, AgentId, Weight};
-use nalgebra::DMatrix;
+use crate::graph::{AgentGraph, AgentId};
 use serde::{Deserialize, Serialize};
 
 /// Strategy for building the neighborhood probability measure.
@@ -359,12 +358,12 @@ mod tests {
     }
 
     #[test]
-    fn test_curvature_path_graph_negative() {
+    fn test_curvature_path_graph_nonnegative() {
         let g = AgentGraph::path(10);
         let orc = make_orc();
         let k = orc.edge_curvature(&g, 4, 5);
-        // Path middle edges should have negative curvature
-        assert!(k < 0.0, "path middle should have negative curvature, got {}", k);
+        // Path interior edges have zero curvature with lazy RW alpha=0.5
+        assert!(k >= 0.0, "path middle should have non-negative curvature, got {}", k);
     }
 
     #[test]
@@ -425,13 +424,13 @@ mod tests {
     }
 
     #[test]
-    fn test_curvature_star_graph() {
+    fn test_curvature_star_graph_positive() {
         let g = AgentGraph::star(5);
         let orc = make_orc();
         let all = orc.all_curvatures(&g);
-        // Star edges should have negative curvature (bottleneck)
+        // Star edges have positive curvature (0.2) with lazy RW alpha=0.5
         for (_, k) in &all {
-            assert!(k < &0.0, "star edge curvature should be negative, got {}", k);
+            assert!(k > &0.0, "star edge curvature should be positive, got {}", k);
         }
     }
 

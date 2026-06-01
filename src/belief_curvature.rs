@@ -5,7 +5,6 @@
 //! curvature of this space (related to the Fisher-Rao metric) governs
 //! how beliefs diverge/converge.
 
-use crate::graph::AgentGraph;
 use nalgebra::{DMatrix, DVector};
 use serde::{Deserialize, Serialize};
 
